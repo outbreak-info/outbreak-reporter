@@ -50,7 +50,6 @@ class Plugin:
         try:
             plugin_info     = plugin_request.json()
             if self.name == 'genomics':
-                import pdb;pdb.set_trace()
                 total_docs      = plugin_info['stats']['total']
                 latest_date_str = plugin_info['src']['genomics_mutations']['version']
             else:
