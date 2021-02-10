@@ -2,37 +2,28 @@ import requests
 import json
 from datetime import datetime
 import secrets
+import sys
 
 PLUGIN_URL   = "https://api.outbreak.info/resources/query?sort=-date&fields=date&q=curatedBy.name:{name}&size=1"
-METADATA_URL = "https://api.outbreak.info/resources/query?aggs=curatedBy.name&facet_size:1000&size=1"
-EPI_URL = "https://api.outbreak.info/covid19/query?q=mostRecent:true%20AND%20admin_level:%221%22%20AND%20country_iso3:USA&size=1&_sorted=false"
+METADATA_URL = "https://api.outbreak.info/resources/query?aggs=curatedBy.name&facet_size=1000"
+EPI_URL      = "https://api.outbreak.info/covid19/query?fields=date&size=1&sort=-date"
+GEN_URL      = "https://api.outbreak.info/genomics/metadata"
 
 today = datetime.now()
 
-def date_diff(url):
-    plugin_request  = requests.get(url)
-    plugin_info     = plugin_request.json()
-    latest_date_str = plugin_info['hits'][0]['date']
-    latest_date     = datetime.strptime(latest_date_str, '%Y-%m-%d')
-    date_difference = (today - latest_date).days
+def get_icon(date_difference, priority=None):
+    ALERTS = ["🟢", "🟡", "🟠", "🔴"]
+    SCHEDULES = {"high": [1, 3, 7], "default": [3, 7, 30], "low": [7, 10, 30]}
+    schedule = SCHEDULES[priority if priority else "default"]
 
-    return date_difference
-
-def get_icon(date_difference):
-    if date_difference < 3:
+    if date_difference   < schedule[0]:
         return "🟢"
-    elif date_difference < 7:
+    elif date_difference < schedule[1]:
         return "🟡"
-    elif date_difference < 30:
+    elif date_difference < schedule[2]:
         return "🟠"
     else:
         return "🔴"
-
-meta_request = requests.get(METADATA_URL)
-metadata     = meta_request.json()
-plugin_names = [i['term'] for i in metadata['facets']['curatedBy.name']['terms']]
-
-messages = []
 
 def format_days(date_difference):
     if date_difference == 0:
@@ -42,26 +33,83 @@ def format_days(date_difference):
 
     return f"{date_difference} days old"
 
-def create_message(date_difference, name):
-    icon = get_icon(date_difference)
-    date_str = format_days(date_difference)
-    message = f"{icon} *{name}* {date_str}"
-    return message
+class Plugin:
+    def __init__(self, name, url=None, priority="default"):
+        if ' ' in name:
+            name = f'"{name}"'
+        self.name     = name
+        self.url      = PLUGIN_URL.format(name=name)
+        self.priority = priority
+        if url:
+            self.url = url
 
-for name in plugin_names:
-    # surround with quotes only if there's a space
-    # if there isn't a space, the quotes mess it up!
-    # gotta be single quotes too! because ES!
-    if ' ' in name:
-        name = f"'{name}'"
-    date_difference = date_diff(PLUGIN_URL.format(name=name))
-    messages.append((create_message(date_difference, name), date_difference))
+        self.set_info()
 
-ordered_messages = [i[0] for i in sorted(messages, key=lambda x: x[1])]
+    def set_info(self):
+        plugin_request  = requests.get(self.url)
+        try:
+            plugin_info     = plugin_request.json()
+            if self.name == 'genomics':
+                import pdb;pdb.set_trace()
+                total_docs      = plugin_info['stats']['total']
+                latest_date_str = plugin_info['src']['genomics_mutations']['version']
+            else:
+                total_docs      = plugin_info['total']
+                latest_date_str = plugin_info['hits'][0]['date']
+            if latest_date_str is None:
+                raise Exception
+        except:
+            self.date_difference = -1
+            return
 
-epi_date = date_diff(EPI_URL)
-# running epi data today means getting epi data from yesterday
-ordered_messages.append(create_message(epi_date - 1, "Epi Data"))
+        latest_date     = datetime.strptime(latest_date_str, '%Y-%m-%d')
+        date_difference = (today - latest_date).days
 
-for m in ordered_messages:
-    requests.post(secrets.SLACK_HOOK_URL, json={'text': m})
+        self.total           = total_docs
+        self.date_difference = date_difference
+
+    def set_message(self):
+        if self.date_difference == -1:
+            self.message         = f"⚫️ could not sort {self.name} by `date`"
+            return
+
+        icon = get_icon(self.date_difference)
+        date_str = format_days(self.date_difference)
+        message = f"{icon} *{self.name}* {date_str}"
+        if self.total:
+            message += f" ({self.total:,})"
+        self.message = message
+
+    def __lt__(self, other):
+        try:
+            return self.date_difference < other.date_difference
+        except:
+            return True
+
+    def __str__(self):
+        try:
+            self.set_message()
+            return self.message or ""
+        except Exception as e:
+            return f"Plugin info for {self.name} raised error {e}"
+
+
+meta_request = requests.get(METADATA_URL)
+metadata     = meta_request.json()
+plugin_names = [i['term'] for i in metadata['facets']['curatedBy.name']['terms']]
+plugins      = [Plugin(name) for name in plugin_names]
+plugins.sort()
+
+epi = Plugin("epidemiological data", url=EPI_URL)
+epi.date_difference = epi.date_difference - 1
+plugins.append(epi)
+
+genomics = Plugin("genomics", url=GEN_URL)
+plugins.append(genomics)
+
+printmode = '--log' in sys.argv
+for m in [str(i) for i in plugins]:
+    if printmode:
+        print(m)
+    else:
+        requests.post(secrets.SLACK_HOOK_URL, json={'text': m})
