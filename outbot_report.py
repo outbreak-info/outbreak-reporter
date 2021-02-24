@@ -51,7 +51,7 @@ class Plugin:
             plugin_info     = plugin_request.json()
             if self.name == 'genomics':
                 total_docs      = plugin_info['stats']['total']
-                latest_date_str = plugin_info['src']['genomics_mutations']['version']
+                latest_date_str = plugin_info['src']['genomics_api']['version']
             else:
                 total_docs      = plugin_info['total']
                 latest_date_str = plugin_info['hits'][0]['date']
