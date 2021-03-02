@@ -40,6 +40,7 @@ class Plugin:
         self.name     = name
         self.url      = PLUGIN_URL.format(name=name)
         self.priority = priority
+        self.total    = None
         if url:
             self.url = url
 
@@ -50,13 +51,17 @@ class Plugin:
         try:
             plugin_info     = plugin_request.json()
             if self.name == 'genomics':
-                total_docs      = plugin_info['stats']['total']
-                latest_date_str = plugin_info['src']['genomics_api']['version']
-            else:
-                total_docs      = plugin_info['total']
-                latest_date_str = plugin_info['hits'][0]['date']
-            if latest_date_str is None:
+                self.total      = plugin_info['stats']['total']
                 raise Exception
+                latest_date_str = plugin_info['src']['genomics_api']['version']
+
+            else:
+                self.total      = plugin_info['total']
+                latest_date_str = plugin_info['hits'][0]['date']
+
+                if latest_date_str is None:
+                    raise Exception
+
         except:
             self.date_difference = -1
             return
@@ -64,17 +69,16 @@ class Plugin:
         latest_date     = datetime.strptime(latest_date_str, '%Y-%m-%d')
         date_difference = (today - latest_date).days
 
-        self.total           = total_docs
         self.date_difference = date_difference
 
     def set_message(self):
         if self.date_difference == -1:
-            self.message         = f"⚫️ could not sort {self.name} by `date`"
+            self.message         = f"⚪️ *{self.name}*: age unknown ({self.total})"
             return
 
         icon = get_icon(self.date_difference)
         date_str = format_days(self.date_difference)
-        message = f"{icon} *{self.name}* {date_str}"
+        message = f"{icon} *{self.name}*: {date_str}"
         if self.total:
             message += f" ({self.total:,})"
         self.message = message
