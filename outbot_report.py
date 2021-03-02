@@ -73,7 +73,7 @@ class Plugin:
 
     def set_message(self):
         if self.date_difference == -1:
-            self.message         = f"⚪️ *{self.name}*: age unknown ({self.total})"
+            self.message         = f"⚪️ *{self.name}*: age unknown ({self.total:,})"
             return
 
         icon = get_icon(self.date_difference)
