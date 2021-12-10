@@ -67,7 +67,6 @@ class Plugin:
             self.date_difference = -1
             return
 
-        print(latest_date_str)
         latest_date     = datetime.strptime(latest_date_str, '%Y-%m-%d')
         date_difference = (today - latest_date).days
 
