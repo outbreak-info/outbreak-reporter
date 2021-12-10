@@ -34,26 +34,27 @@ def format_days(date_difference):
     return f"{date_difference} days old"
 
 class Plugin:
-    def __init__(self, name, url=None, priority="default"):
+    def __init__(self, name, url=None, priority="default", headers=None):
         if ' ' in name:
             name = f'"{name}"'
         self.name     = name
         self.url      = PLUGIN_URL.format(name=name)
         self.priority = priority
         self.total    = None
+        self.headers  = headers or {}
         if url:
             self.url = url
 
         self.set_info()
 
     def set_info(self):
-        plugin_request  = requests.get(self.url)
+        plugin_request  = requests.get(self.url, headers=self.headers)
         try:
             plugin_info     = plugin_request.json()
             if self.name == 'genomics':
                 self.total      = plugin_info['stats']['total']
-                raise Exception
-                latest_date_str = plugin_info['src']['genomics_api']['version']
+                # truncate out HH-MM to ignore while parsing
+                latest_date_str = plugin_info['src']['genomics_api']['version'][:10]
 
             else:
                 self.total      = plugin_info['total']
@@ -66,6 +67,7 @@ class Plugin:
             self.date_difference = -1
             return
 
+        print(latest_date_str)
         latest_date     = datetime.strptime(latest_date_str, '%Y-%m-%d')
         date_difference = (today - latest_date).days
 
@@ -107,7 +109,7 @@ epi = Plugin("epidemiological data", url=EPI_URL)
 epi.date_difference = epi.date_difference - 1
 plugins.append(epi)
 
-genomics = Plugin("genomics", url=GEN_URL)
+genomics = Plugin("genomics", url=GEN_URL, headers={'Authorization': secrets.GEN_AUTH})
 plugins.append(genomics)
 
 printmode = '--log' in sys.argv
