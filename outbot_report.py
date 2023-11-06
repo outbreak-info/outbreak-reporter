@@ -54,7 +54,7 @@ class Plugin:
             if self.name == 'genomics':
                 self.total      = plugin_info['stats']['total']
                 # truncate out HH-MM to ignore while parsing
-                latest_date_str = plugin_info['src']['genomics_api']['version'][:10]
+                latest_date_str = plugin_info['src']['genomics_muts']['version'][:10]
 
             else:
                 self.total      = plugin_info['total']
